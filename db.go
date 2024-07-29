@@ -209,7 +209,7 @@ func Open(opt Options) (*DB, error) {
 				return nil, err
 			}
 
-			opt.Infof("lock acquire successfully for dir%s", opt.Dir)
+			opt.Infof("lock acquire successfully for dir:%s", opt.Dir)
 			defer func() {
 				if dirLockGuard != nil {
 					_ = dirLockGuard.release()
