@@ -186,6 +186,10 @@ func checkAndSetOptions(opt *Options) error {
 
 // Open returns a new DB object.
 func Open(opt Options) (*DB, error) {
+
+	if opt.Logger == nil {
+		opt.Logger = defaultLogger(INFO)
+	}
 	if err := checkAndSetOptions(&opt); err != nil {
 		return nil, err
 	}
@@ -204,6 +208,8 @@ func Open(opt Options) (*DB, error) {
 			if err != nil {
 				return nil, err
 			}
+
+			opt.Infof("lock acquire successfully for dir%s", opt.Dir)
 			defer func() {
 				if dirLockGuard != nil {
 					_ = dirLockGuard.release()
@@ -213,15 +219,19 @@ func Open(opt Options) (*DB, error) {
 			if err != nil {
 				return nil, err
 			}
+			opt.Infof("absolute path for dir%s", opt.Dir)
 			absValueDir, err := filepath.Abs(opt.ValueDir)
 			if err != nil {
 				return nil, err
 			}
+			opt.Infof("absolute path for valueDir%s", opt.ValueDir)
+
 			if absValueDir != absDir {
 				valueDirLockGuard, err = acquireDirectoryLock(opt.ValueDir, lockFile, opt.ReadOnly)
 				if err != nil {
 					return nil, err
 				}
+				opt.Infof("lock acquire successfully for valueDir%s", opt.ValueDir)
 				defer func() {
 					if valueDirLockGuard != nil {
 						_ = valueDirLockGuard.release()
@@ -229,12 +239,16 @@ func Open(opt Options) (*DB, error) {
 				}()
 			}
 		}
+		opt.Infof("InMemory opt was enabled and successfully configured")
 	}
 
 	manifestFile, manifest, err := openOrCreateManifestFile(opt)
 	if err != nil {
 		return nil, err
 	}
+
+	opt.Infof("manifest file successfully createdOROpened")
+
 	defer func() {
 		if manifestFile != nil {
 			_ = manifestFile.close()
@@ -286,6 +300,7 @@ func Open(opt Options) (*DB, error) {
 		if err != nil {
 			return nil, y.Wrap(err, "failed to create data cache")
 		}
+		opt.Infof("BlockCacheSize opt was enabled and successfully configured")
 	}
 
 	if opt.IndexCacheSize > 0 {
@@ -308,6 +323,9 @@ func Open(opt Options) (*DB, error) {
 		if err != nil {
 			return nil, y.Wrap(err, "failed to create bf cache")
 		}
+
+		opt.Infof("IndexCacheSize opt was enabled and successfully configured")
+
 	}
 
 	db.closers.cacheHealth = z.NewCloser(1)
@@ -372,12 +390,19 @@ func Open(opt Options) (*DB, error) {
 		return db, y.Wrapf(err, "During db.vlog.open")
 	}
 
+	opt.Infof("vlog file(s) are open")
+
 	// Let's advance nextTxnTs to one more than whatever we observed via
 	// replaying the logs.
 	db.orc.txnMark.Done(db.orc.nextTxnTs)
+
+	opt.Infof("txnMark marked as done")
+
 	// In normal mode, we must update readMark so older versions of keys can be removed during
 	// compaction when run in offline mode via the flatten tool.
 	db.orc.readMark.Done(db.orc.nextTxnTs)
+	opt.Infof("readMark marked as done")
+
 	db.orc.incrementNextTs()
 
 	go db.threshold.listenForValueThresholdUpdate()
@@ -400,6 +425,8 @@ func Open(opt Options) (*DB, error) {
 	valueDirLockGuard = nil
 	dirLockGuard = nil
 	manifestFile = nil
+
+	opt.Infof("badger db successfully created and returned")
 	return db, nil
 }
 
